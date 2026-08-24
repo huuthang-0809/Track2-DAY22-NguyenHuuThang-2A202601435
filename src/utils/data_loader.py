@@ -50,20 +50,38 @@ def split_text(text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> lis
     return splitter.split_text(text)
 
 
-def build_vectorstore(chunks: list, embeddings):
+def build_vectorstore(chunks: list, embeddings, cache_dir: str = None):
     """
-    Tạo FAISS vectorstore từ danh sách chunks và embeddings.
+    Tạo FAISS vectorstore từ danh sách chunks và embeddings (có cache dữ liệu).
 
     Args:
         chunks    : list[str] — danh sách text chunks đã chia
         embeddings: Embeddings instance (từ get_embeddings())
+        cache_dir : thư mục lưu FAISS index
 
     Returns:
         FAISS vectorstore đã được index và sẵn sàng dùng để retrieve
     """
+    import os
     from langchain_community.vectorstores import FAISS
+
+    if cache_dir is None:
+        cache_dir = str(Path(__file__).parent.parent.parent / "data" / "faiss_index")
+
+    if os.path.exists(cache_dir):
+        try:
+            print("⚡ Tải FAISS index từ cache dữ liệu...")
+            return FAISS.load_local(cache_dir, embeddings, allow_dangerous_deserialization=True)
+        except Exception as e:
+            print(f"⚠️  Không thể đọc cache: {e}, tạo lại index...")
 
     print(f"🔨 Đang tạo FAISS index từ {len(chunks)} chunks ...")
     vectorstore = FAISS.from_texts(chunks, embeddings)
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+        vectorstore.save_local(cache_dir)
+        print("💾 Đã lưu FAISS index vào cache.")
+    except Exception as e:
+        print(f"⚠️  Không thể lưu cache: {e}")
     print("✅ FAISS vectorstore đã sẵn sàng.")
     return vectorstore

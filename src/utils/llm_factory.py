@@ -106,18 +106,86 @@ def get_embeddings(provider: str = None):
     provider = (provider or config.PROVIDER).lower()
 
     if provider in ("openai", "openrouter"):
-        from langchain_openai import OpenAIEmbeddings
-        kwargs = {
-            "model": config.OPENAI_EMBEDDING_MODEL,
-            "api_key": config.OPENAI_API_KEY,
-        }
-        if config.OPENAI_BASE_URL:
-            kwargs["base_url"] = config.OPENAI_BASE_URL
-        return OpenAIEmbeddings(**kwargs)
+        if config.OPENAI_API_KEY and not config.OPENAI_API_KEY.startswith("your_"):
+            from langchain_openai import OpenAIEmbeddings
+            kwargs = {
+                "model": config.OPENAI_EMBEDDING_MODEL,
+                "api_key": config.OPENAI_API_KEY,
+            }
+            if config.OPENAI_BASE_URL:
+                kwargs["base_url"] = config.OPENAI_BASE_URL
+            return OpenAIEmbeddings(**kwargs)
+        elif config.GOOGLE_API_KEY and not config.GOOGLE_API_KEY.startswith("your_"):
+            print("ℹ️  Dùng Google Gemini Embeddings thay thế cho OpenRouter/OpenAI.")
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            import time
+
+            class AutoRetryGoogleEmbeddings(GoogleGenerativeAIEmbeddings):
+                def embed_documents(self, texts: list[str]) -> list[list[float]]:
+                    for attempt in range(10):
+                        try:
+                            return super().embed_documents(texts)
+                        except Exception as e:
+                            err_str = str(e).lower()
+                            if ("429" in err_str or "resource_exhausted" in err_str or "quota" in err_str) and attempt < 9:
+                                print(f"\n ⏳ Rate Limit Embeddings (429), tạm dừng 65s để reset Quota Google... (lần thử {attempt + 1}/9)")
+                                time.sleep(65)
+                            else:
+                                raise e
+
+                def embed_query(self, text: str) -> list[float]:
+                    for attempt in range(10):
+                        try:
+                            return super().embed_query(text)
+                        except Exception as e:
+                            err_str = str(e).lower()
+                            if ("429" in err_str or "resource_exhausted" in err_str or "quota" in err_str) and attempt < 9:
+                                print(f"\n ⏳ Rate Limit Embeddings (429), tạm dừng 65s để reset Quota Google... (lần thử {attempt + 1}/9)")
+                                time.sleep(65)
+                            else:
+                                raise e
+
+            return AutoRetryGoogleEmbeddings(
+                model=config.GEMINI_EMBEDDING_MODEL,
+                google_api_key=config.GOOGLE_API_KEY,
+            )
+        else:
+            from langchain_openai import OpenAIEmbeddings
+            return OpenAIEmbeddings(
+                model=config.OPENAI_EMBEDDING_MODEL,
+                api_key=config.OPENAI_API_KEY,
+            )
 
     elif provider == "gemini":
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
-        return GoogleGenerativeAIEmbeddings(
+        import time
+
+        class AutoRetryGoogleEmbeddings(GoogleGenerativeAIEmbeddings):
+            def embed_documents(self, texts: list[str]) -> list[list[float]]:
+                for attempt in range(10):
+                    try:
+                        return super().embed_documents(texts)
+                    except Exception as e:
+                        err_str = str(e).lower()
+                        if ("429" in err_str or "resource_exhausted" in err_str or "quota" in err_str) and attempt < 9:
+                            print(f"\n ⏳ Rate Limit Embeddings (429), tạm dừng 65s để reset Quota Google... (lần thử {attempt + 1}/9)")
+                            time.sleep(65)
+                        else:
+                            raise e
+
+            def embed_query(self, text: str) -> list[float]:
+                for attempt in range(10):
+                    try:
+                        return super().embed_query(text)
+                    except Exception as e:
+                        err_str = str(e).lower()
+                        if ("429" in err_str or "resource_exhausted" in err_str or "quota" in err_str) and attempt < 9:
+                            print(f"\n ⏳ Rate Limit Embeddings (429), tạm dừng 65s để reset Quota Google... (lần thử {attempt + 1}/9)")
+                            time.sleep(65)
+                        else:
+                            raise e
+
+        return AutoRetryGoogleEmbeddings(
             model=config.GEMINI_EMBEDDING_MODEL,
             google_api_key=config.GOOGLE_API_KEY,
         )
